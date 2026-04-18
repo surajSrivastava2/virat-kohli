@@ -39,7 +39,11 @@ async function askAI(messages) {
 }
 
 // ================= MIDDLEWARE =================
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.static("."));
 
