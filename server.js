@@ -2,31 +2,42 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
-const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ================= OPENAI SETUP =================
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// ================= GROQ API SETUP =================
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 async function askAI(messages) {
-  console.log("Calling OpenAI with", messages.length, "messages");
+  console.log("Calling Groq with", messages.length, "messages");
   
-  const completion = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [
-      { role: "system", content: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." },
-      ...messages
-    ],
-    temperature: 0.7,
-    max_tokens: 2048
+  const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [
+        { role: "system", content: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." },
+        ...messages
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
   });
   
-  return completion.choices[0].message.content;
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Groq error: ${response.status} - ${error}`);
+  }
+  
+  const data = await response.json();
+  return data.choices[0].message.content;
 }
 
 // ================= MIDDLEWARE =================
@@ -202,7 +213,7 @@ app.get("/attendance", authMiddleware, (req, res) => {
 
 // ================= HEALTH =================
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", ai: "OpenAI GPT-3.5" });
+  res.json({ status: "OK", ai: "Groq LLaMA 3-70B" });
 });
 
 // ================= START =================
