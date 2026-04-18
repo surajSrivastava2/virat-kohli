@@ -2,49 +2,31 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
+const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ================= GEMINI API SETUP =================
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// ================= OPENAI SETUP =================
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 async function askAI(messages) {
-  // Use the correct Gemini API format
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+  console.log("Calling OpenAI with", messages.length, "messages");
   
-  // Build content from messages
-  const prompt = messages.map(m => m.content).join("\n");
-  
-  console.log("Sending to Gemini:", prompt.substring(0, 50) + "...");
-  
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: prompt }]
-      }]
-    })
+  const completion = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      { role: "system", content: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." },
+      ...messages
+    ],
+    temperature: 0.7,
+    max_tokens: 2048
   });
   
-  console.log("Gemini response status:", response.status);
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Gemini error:", errorText);
-    throw new Error(`AI API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  
-  if (!data.candidates || !data.candidates[0]) {
-    console.error("No candidates in response:", JSON.stringify(data));
-    throw new Error("No response from AI");
-  }
-  
-  return data.candidates[0].content.parts[0].text;
+  return completion.choices[0].message.content;
 }
 
 // ================= MIDDLEWARE =================
@@ -131,13 +113,11 @@ app.post("/chat", authMiddleware, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: "Message required" });
     
-    console.log("Chat:", message.substring(0, 50));
     const reply = await askAI([{ role: "user", content: message }]);
-    console.log("Reply:", reply.substring(0, 50));
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err.message);
-    res.status(500).json({ message: "AI service error: " + err.message });
+    res.status(500).json({ message: "AI error: " + err.message });
   }
 });
 
@@ -147,7 +127,7 @@ app.post("/summarize", authMiddleware, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ message: "Text required" });
     
-    const prompt = `Summarize this:\n\n${text}`;
+    const prompt = `Summarize the following study material into clear, concise bullet points suitable for exam revision:\n\n${text}`;
     const summary = await askAI([{ role: "user", content: prompt }]);
     res.json({ summary });
   } catch (err) {
@@ -162,9 +142,15 @@ app.post("/quiz", authMiddleware, async (req, res) => {
     const { topic } = req.body;
     if (!topic) return res.status(400).json({ message: "Topic required" });
     
-    const prompt = `Generate 5 MCQ about "${topic}". Format: Question, 4 options (A,B,C,D), answer.`;
+    const prompt = `Generate 5 multiple choice questions about "${topic}" for student practice. For each question, provide the question text, 4 options (A, B, C, D), and the correct answer. Format clearly.`;
     const response = await askAI([{ role: "user", content: prompt }]);
-    res.json({ quiz: [response] });
+    
+    const questions = response
+      .split(/\n\d+\.|\n(?=\d+\.)|\n(?=Question \d)/i)
+      .map(q => q.trim())
+      .filter(q => q.length > 20);
+    
+    res.json({ quiz: questions.length > 0 ? questions : [response] });
   } catch (err) {
     console.error("Quiz error:", err.message);
     res.status(500).json({ message: err.message });
@@ -216,7 +202,7 @@ app.get("/attendance", authMiddleware, (req, res) => {
 
 // ================= HEALTH =================
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", ai: "Google Gemini Pro" });
+  res.json({ status: "OK", ai: "OpenAI GPT-3.5" });
 });
 
 // ================= START =================
