@@ -129,9 +129,12 @@ app.post("/chat", authMiddleware, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: "Message required" });
     
+    console.log("Chat request received:", message.substring(0, 50) + "...");
     const reply = await askAI([{ role: "user", content: message }]);
+    console.log("Chat response sent");
     res.json({ reply });
   } catch (err) {
+    console.error("Chat error:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
