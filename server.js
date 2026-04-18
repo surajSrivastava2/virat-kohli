@@ -21,7 +21,7 @@ async function askAI(messages) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-model: "THE_MODEL_NAME_FROM_GROQ",
+model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." },
         ...messages
