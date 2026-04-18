@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 
 // ================= GEMINI API SETUP =================
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-1.5-flash-latest";
 
 async function askAI(messages) {
   // Convert messages to Gemini format
@@ -18,6 +18,8 @@ async function askAI(messages) {
     parts: [{ text: m.content }]
   }));
   
+  console.log("Calling Gemini API...");
+  
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
     {
@@ -25,9 +27,6 @@ async function askAI(messages) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents,
-        systemInstruction: {
-          parts: [{ text: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." }]
-        },
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 2048
@@ -37,8 +36,9 @@ async function askAI(messages) {
   );
   
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI API error: ${response.status} - ${error}`);
+    const errorText = await response.text();
+    console.error("Gemini API error:", response.status, errorText);
+    throw new Error(`AI API error: ${response.status}`);
   }
   
   const data = await response.json();
@@ -123,13 +123,13 @@ app.get("/me", authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
 
-// ================= CHAT (with error logging) =================
+// ================= CHAT =================
 app.post("/chat", authMiddleware, async (req, res) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: "Message required" });
     
-    console.log("Chat request received:", message.substring(0, 50) + "...");
+    console.log("Chat request:", message.substring(0, 50));
     const reply = await askAI([{ role: "user", content: message }]);
     console.log("Chat response sent");
     res.json({ reply });
