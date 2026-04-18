@@ -123,7 +123,7 @@ app.get("/me", authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
 
-// ================= CHAT =================
+// ================= CHAT (with error logging) =================
 app.post("/chat", authMiddleware, async (req, res) => {
   try {
     const { message } = req.body;
@@ -149,6 +149,7 @@ app.post("/summarize", authMiddleware, async (req, res) => {
     const summary = await askAI([{ role: "user", content: prompt }]);
     res.json({ summary });
   } catch (err) {
+    console.error("Summarize error:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
@@ -162,7 +163,6 @@ app.post("/quiz", authMiddleware, async (req, res) => {
     const prompt = `Generate 5 multiple choice questions about "${topic}" for student practice. For each question, provide the question text, 4 options (A, B, C, D), and the correct answer. Format clearly.`;
     const response = await askAI([{ role: "user", content: prompt }]);
     
-    // Parse questions from response (split by numbers or newlines)
     const questions = response
       .split(/\n\d+\.|\n(?=\d+\.)|\n(?=Question \d)/i)
       .map(q => q.trim())
@@ -170,6 +170,7 @@ app.post("/quiz", authMiddleware, async (req, res) => {
     
     res.json({ quiz: questions.length > 0 ? questions : [response] });
   } catch (err) {
+    console.error("Quiz error:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
@@ -200,7 +201,6 @@ app.post("/attendance", authMiddleware, (req, res) => {
   const records = loadJson(ATTENDANCE_FILE, {});
   if (!records[req.user.email]) records[req.user.email] = [];
   
-  // Update if exists, else add
   const existing = records[req.user.email].find(r => r.subject === subject);
   if (existing) {
     existing.attended = attended;
