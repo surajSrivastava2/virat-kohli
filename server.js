@@ -9,39 +9,41 @@ const PORT = process.env.PORT || 5000;
 
 // ================= GEMINI API SETUP =================
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-1.5-flash-latest";
 
 async function askAI(messages) {
-  // Convert messages to Gemini format
-  const contents = messages.map(m => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }]
-  }));
+  // Use the correct Gemini API format
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
   
-  console.log("Calling Gemini API...");
+  // Build content from messages
+  const prompt = messages.map(m => m.content).join("\n");
   
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048
-        }
-      })
-    }
-  );
+  console.log("Sending to Gemini:", prompt.substring(0, 50) + "...");
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
+    })
+  });
+  
+  console.log("Gemini response status:", response.status);
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Gemini API error:", response.status, errorText);
+    console.error("Gemini error:", errorText);
     throw new Error(`AI API error: ${response.status}`);
   }
   
   const data = await response.json();
+  
+  if (!data.candidates || !data.candidates[0]) {
+    console.error("No candidates in response:", JSON.stringify(data));
+    throw new Error("No response from AI");
+  }
+  
   return data.candidates[0].content.parts[0].text;
 }
 
@@ -129,13 +131,13 @@ app.post("/chat", authMiddleware, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ message: "Message required" });
     
-    console.log("Chat request:", message.substring(0, 50));
+    console.log("Chat:", message.substring(0, 50));
     const reply = await askAI([{ role: "user", content: message }]);
-    console.log("Chat response sent");
+    console.log("Reply:", reply.substring(0, 50));
     res.json({ reply });
   } catch (err) {
     console.error("Chat error:", err.message);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "AI service error: " + err.message });
   }
 });
 
@@ -145,7 +147,7 @@ app.post("/summarize", authMiddleware, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ message: "Text required" });
     
-    const prompt = `Summarize the following study material into clear, concise bullet points suitable for exam revision:\n\n${text}`;
+    const prompt = `Summarize this:\n\n${text}`;
     const summary = await askAI([{ role: "user", content: prompt }]);
     res.json({ summary });
   } catch (err) {
@@ -160,15 +162,9 @@ app.post("/quiz", authMiddleware, async (req, res) => {
     const { topic } = req.body;
     if (!topic) return res.status(400).json({ message: "Topic required" });
     
-    const prompt = `Generate 5 multiple choice questions about "${topic}" for student practice. For each question, provide the question text, 4 options (A, B, C, D), and the correct answer. Format clearly.`;
+    const prompt = `Generate 5 MCQ about "${topic}". Format: Question, 4 options (A,B,C,D), answer.`;
     const response = await askAI([{ role: "user", content: prompt }]);
-    
-    const questions = response
-      .split(/\n\d+\.|\n(?=\d+\.)|\n(?=Question \d)/i)
-      .map(q => q.trim())
-      .filter(q => q.length > 20);
-    
-    res.json({ quiz: questions.length > 0 ? questions : [response] });
+    res.json({ quiz: [response] });
   } catch (err) {
     console.error("Quiz error:", err.message);
     res.status(500).json({ message: err.message });
@@ -220,10 +216,10 @@ app.get("/attendance", authMiddleware, (req, res) => {
 
 // ================= HEALTH =================
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", ai: "Google Gemini 1.5 Flash" });
+  res.json({ status: "OK", ai: "Google Gemini Pro" });
 });
 
 // ================= START =================
 app.listen(PORT, () => {
-  console.log(`🚀 SmartStudy backend running on http://localhost:${PORT}`);
+  console.log(`🚀 SmartStudy backend running on port ${PORT}`);
 });
