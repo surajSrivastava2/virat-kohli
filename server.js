@@ -7,35 +7,42 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ================= GROQ/OPENAI SETUP =================
-// Uses Groq API (OpenAI-compatible)
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+// ================= GEMINI API SETUP =================
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = "gemini-1.5-flash";
 
 async function askAI(messages) {
-  const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "llama3-70b-8192",
-      messages: [
-        { role: "system", content: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." },
-        ...messages
-      ],
-      temperature: 0.7,
-      max_tokens: 2048
-    })
-  });
+  // Convert messages to Gemini format
+  const contents = messages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }]
+  }));
+  
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: {
+          parts: [{ text: "You are SmartStudy AI, a helpful academic tutor for students. Provide clear, concise, and accurate educational assistance." }]
+        },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048
+        }
+      })
+    }
+  );
   
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.status}`);
+    const error = await response.text();
+    throw new Error(`AI API error: ${response.status} - ${error}`);
   }
   
   const data = await response.json();
-  return data.choices[0].message.content;
+  return data.candidates[0].content.parts[0].text;
 }
 
 // ================= MIDDLEWARE =================
@@ -45,7 +52,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
-app.use(express.static("."));
 
 // ================= JWT =================
 const SECRET = process.env.JWT_SECRET || "smartstudy_secret_key";
@@ -211,7 +217,7 @@ app.get("/attendance", authMiddleware, (req, res) => {
 
 // ================= HEALTH =================
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", ai: "Groq LLaMA 3-70B" });
+  res.json({ status: "OK", ai: "Google Gemini 1.5 Flash" });
 });
 
 // ================= START =================
